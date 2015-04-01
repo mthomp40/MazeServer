@@ -34,6 +34,11 @@ class MazeApplication extends Application {
     public function onDisconnect($client) {
         $id = $client->getClientId();
         unset($this->_clients[$id]);
+        $infoarray['players'] = $this->_composeUpdateMessage();
+        $encodedUpdate = $this->_encodeData('updateplayers', $infoarray['players']);
+        foreach ($this->_clients as $sendto) {
+            $sendto->send($encodedUpdate);
+        }
     }
 
     public function onData($data, $client) {
@@ -67,15 +72,19 @@ class MazeApplication extends Application {
                     return;
                 }
             }
-            $id = $client->getClientId();
-            $this->_clients[$id] = $client;
             $infoarray = $client->getClientInfo();
             $infoarray['uname'] = $info['uname'];
             $infoarray['maze'] = $this->maze->cells;
-            $infoarray['persons'] = $this->_composeUpdateMessage();
             $client->setClientInfo($infoarray);
+            $id = $client->getClientId();
+            $this->_clients[$id] = $client;
             $encodedUpdate = $this->_encodeData('initgame', $infoarray);
             $client->send($encodedUpdate);
+            $infoarray['players'] = $this->_composeUpdateMessage();
+            $encodedUpdate = $this->_encodeData('updateplayers', $infoarray['players']);
+            foreach ($this->_clients as $sendto) {
+                $sendto->send($encodedUpdate);
+            }
             return;
         } else if ($action == "start") {
             $infoarray = $client->getClientInfo();
