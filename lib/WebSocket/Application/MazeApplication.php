@@ -8,20 +8,6 @@ class MazeApplication extends Application {
     private static $colourNamesArray = array('red', 'green', 'blue', 'aqua',
         'fuschia', 'lime', 'maroon', 'navy', 'yellow');
     private static $colourcounter = 0;
-    private static $mazemap = [// 1  2  3  4  5  6  7  8  9
-        [1, 1, 1, 1, 1, 1, 1, 1, 1, 1,], // 0
-        [1, 0, 1, 0, 0, 1, 0, 0, 0, 1,], // 1
-        [1, 1, 1, 0, 0, 1, 0, 0, 0, 1,], // 2
-        [1, 0, 1, 0, 0, 1, 1, 0, 0, 1,], // 3
-        [1, 0, 1, 0, 0, 0, 1, 0, 0, 1,], // 4
-        [1, 0, 1, 0, 0, 0, 1, 1, 1, 1,], // 5
-        [1, 0, 1, 0, 0, 0, 0, 1, 0, 1,], // 6
-        [1, 0, 1, 0, 0, 1, 0, 1, 0, 1,], // 7
-        [1, 0, 1, 0, 0, 1, 0, 1, 0, 1,], // 8
-        [1, 1, 1, 1, 1, 1, 1, 1, 1, 1,], // 9
-    ];
-    //private $mapW = $mazemap.length;
-    //private $mapH = $mazemap[0].length;
     private $_clients = array();
 
     public function onConnect($client) {
@@ -38,6 +24,7 @@ class MazeApplication extends Application {
             MazeApplication::$colourcounter = 0;
         }
         $client->setClientInfo($info);
+        echo '<script type="text/javascript" src="maze.js"></script>';
     }
 
     public function onDisconnect($client) {
@@ -80,10 +67,12 @@ class MazeApplication extends Application {
             $this->_clients[$id] = $client;
             $infoarray = $client->getClientInfo();
             $infoarray['uname'] = $info['uname'];
-            $infoarray['mazemap'] = json_encode(MazeApplication::$mazemap);
+    
+            echo '<script type="text/javascript">initMaze();</script>';
+            
             $client->setClientInfo($infoarray);
             $updateData = $this->_composeUpdateMessage();
-            $encodedUpdate = $this->_encodeData('setupmap', $updateData);
+            $encodedUpdate = $this->_encodeData('initgame', $updateData);
             $client->send($encodedUpdate);
         }
         $infoarray = $client->getClientInfo();
