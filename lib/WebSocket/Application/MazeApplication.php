@@ -9,6 +9,11 @@ class MazeApplication extends Application {
         'fuschia', 'lime', 'maroon', 'navy', 'yellow');
     private static $colourcounter = 0;
     private $_clients = array();
+    private $maze;
+
+    public function __construct() {
+        $this->maze = new Maze(25, 25);
+    }
 
     public function onConnect($client) {
 
@@ -24,7 +29,6 @@ class MazeApplication extends Application {
             MazeApplication::$colourcounter = 0;
         }
         $client->setClientInfo($info);
-        echo '<script type="text/javascript" src="maze.js"></script>';
     }
 
     public function onDisconnect($client) {
@@ -67,13 +71,24 @@ class MazeApplication extends Application {
             $this->_clients[$id] = $client;
             $infoarray = $client->getClientInfo();
             $infoarray['uname'] = $info['uname'];
-    
-            echo '<script type="text/javascript">initMaze();</script>';
-            
+            $infoarray['maze'] = $this->maze->cells;
+            $infoarray['persons'] = $this->_composeUpdateMessage();
+            $client->setClientInfo($infoarray);
+            $encodedUpdate = $this->_encodeData('initgame', $infoarray);
+            $client->send($encodedUpdate);
+            return;
+        } else if ($action == "start") {
+            $infoarray = $client->getClientInfo();
+            $this->log(var_dump($this->maze->getStart()));
+            $infoarray['location'] = $this->maze->getStart();
+            $infoarray['heading'] = "e";
+            $infoarray['action'] = null;
             $client->setClientInfo($infoarray);
             $updateData = $this->_composeUpdateMessage();
-            $encodedUpdate = $this->_encodeData('initgame', $updateData);
-            $client->send($encodedUpdate);
+            $encodedUpdate = $this->_encodeData('update', $updateData);
+            foreach ($this->_clients as $sendto) {
+                $sendto->send($encodedUpdate);
+            }
         }
         $infoarray = $client->getClientInfo();
         $infoarray['uname'] = $info['uname'];
@@ -92,6 +107,10 @@ class MazeApplication extends Application {
             $msgdata[] = $info;
         }
         return $msgdata;
+    }
+
+    public function log($message, $type = 'info') {
+        echo date('Y-m-d H:i:s') . ' [' . ($type ? $type : 'error') . '] ' . $message . PHP_EOL;
     }
 
 }
