@@ -95,6 +95,7 @@ class MazeApplication extends Application {
         } else if ($action == "direction") {
             $infoarray = $client->getClientInfo();
             $infoarray['heading'] = $info['heading'];
+            $infoarray['action'] = null;
             $client->setClientInfo($infoarray);
             $id = $client->getClientId();
             $this->_clients[$id] = $client;
@@ -107,7 +108,6 @@ class MazeApplication extends Application {
             $this->_clients[$id] = $client;
         } else if ($action == "move") {
             $infoarray = $client->getClientInfo();
-            $this->log(var_dump($info));
             if ($info['heading'] === 'left') {
                 --$infoarray['location']->x;
             } else if ($info['heading'] === 'right') {
@@ -117,15 +117,35 @@ class MazeApplication extends Application {
             } else if ($info['heading'] === 'down') {
                 ++$infoarray['location']->y;
             }
-            $client->setClientInfo($infoarray);
-            $id = $client->getClientId();
-            $this->_clients[$id] = $client;
+            $collision = $this->checkForCollision($infoarray['location']);
+            if ($collision == null) {
+                $infoarray['action'] = null;
+                $client->setClientInfo($infoarray);
+                $id = $client->getClientId();
+                $this->_clients[$id] = $client;
+            } else {
+                $infoarray['action'] = null;
+                $infoarray['player'] = $collision;
+                $client->send($this->_encodeData('die', $infoarray));
+                $infoarray['player'] = $client;
+                $collision->send($this->_encodeData('die', $infoarray));
+            }
         }
         $updateData = $this->_composeUpdateMessage();
         $encodedUpdate = $this->_encodeData('update', $updateData);
         foreach ($this->_clients as $sendto) {
             $sendto->send($encodedUpdate);
         }
+    }
+
+    private function checkForCollision($location) {
+        foreach ($this->_clients as $aclient) {
+            $info = $aclient->getClientInfo();
+            if ($info['location'] == $location) {
+                return $aclient;
+            }
+        }
+        return null;
     }
 
     private function _composeUpdateMessage() {
