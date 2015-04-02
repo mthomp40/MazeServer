@@ -12,7 +12,7 @@ class MazeApplication extends Application {
     private $maze;
 
     public function __construct() {
-        $this->maze = new Maze(25, 25);
+        $this->maze = new Maze(15, 15);
     }
 
     public function onConnect($client) {
@@ -88,20 +88,39 @@ class MazeApplication extends Application {
             return;
         } else if ($action == "start") {
             $infoarray = $client->getClientInfo();
-            $this->log(var_dump($this->maze->getStart()));
             $infoarray['location'] = $this->maze->getStart();
-            $infoarray['heading'] = "e";
+            $infoarray['heading'] = "right";
             $infoarray['action'] = null;
             $client->setClientInfo($infoarray);
-            $updateData = $this->_composeUpdateMessage();
-            $encodedUpdate = $this->_encodeData('update', $updateData);
-            foreach ($this->_clients as $sendto) {
-                $sendto->send($encodedUpdate);
+        } else if ($action == "direction") {
+            $infoarray = $client->getClientInfo();
+            $infoarray['heading'] = $info['heading'];
+            $client->setClientInfo($infoarray);
+            $id = $client->getClientId();
+            $this->_clients[$id] = $client;
+        } else if ($action == "fire") {
+            $infoarray = $client->getClientInfo();
+            $infoarray['heading'] = $info['heading'];
+            $infoarray['action'] = "fire";
+            $client->setClientInfo($infoarray);
+            $id = $client->getClientId();
+            $this->_clients[$id] = $client;
+        } else if ($action == "move") {
+            $infoarray = $client->getClientInfo();
+            $this->log(var_dump($info));
+            if ($info['heading'] === 'left') {
+                --$infoarray['location']->x;
+            } else if ($info['heading'] === 'right') {
+                ++$infoarray['location']->x;
+            } else if ($info['heading'] === 'up') {
+                --$infoarray['location']->y;
+            } else if ($info['heading'] === 'down') {
+                ++$infoarray['location']->y;
             }
+            $client->setClientInfo($infoarray);
+            $id = $client->getClientId();
+            $this->_clients[$id] = $client;
         }
-        $infoarray = $client->getClientInfo();
-        $infoarray['uname'] = $info['uname'];
-        $client->setClientInfo($infoarray);
         $updateData = $this->_composeUpdateMessage();
         $encodedUpdate = $this->_encodeData('update', $updateData);
         foreach ($this->_clients as $sendto) {
