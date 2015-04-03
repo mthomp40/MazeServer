@@ -16,19 +16,8 @@ class MazeApplication extends Application {
     }
 
     public function onConnect($client) {
-
         $id = $client->getClientId();
         $this->_clients[$id] = $client;
-
-        // Extra code to set up application specific client data
-        $info = array();
-        $info['colour'] = MazeApplication::$colourNamesArray[MazeApplication::$colourcounter];
-
-        MazeApplication::$colourcounter++;
-        if (MazeApplication::$colourcounter == 9) {
-            MazeApplication::$colourcounter = 0;
-        }
-        $client->setClientInfo($info);
     }
 
     public function onDisconnect($client) {
@@ -44,24 +33,10 @@ class MazeApplication extends Application {
     public function onData($data, $client) {
 
         $decodedData = $this->_decodeData($data);
-        // if ($decodedData === false) {
-        // @todo: invalid request trigger error...
-        // }
-//        $actionName = '_action' . ucfirst($decodedData['action']);
-//        if (method_exists($this, $actionName)) {
-//            call_user_func(array($this, $actionName), array($decodedData['data']));
-//        }
         $action = $decodedData['action'];
         $info = $decodedData['data'];
         $this->_process($client, $action, $info);
     }
-
-//    private function _actionEcho($text) {
-//        $encodedData = $this->_encodeData('echo', $text);
-//        foreach ($this->_clients as $sendto) {
-//            $sendto->send($encodedData);
-//        }
-//    }
 
     private function _process($client, $action, $info) {
         if ($action == "login") {
@@ -74,24 +49,30 @@ class MazeApplication extends Application {
             }
             $infoarray = $client->getClientInfo();
             $infoarray['uname'] = $info['uname'];
+            $infoarray['colour'] = MazeApplication::$colourNamesArray[MazeApplication::$colourcounter];
+            MazeApplication::$colourcounter++;
+            if (MazeApplication::$colourcounter == 9) {
+                MazeApplication::$colourcounter = 0;
+            }
+            $infoarray['loggedin'] = true;
+            $infoarray['inplay'] = false;
             $infoarray['maze'] = $this->maze->cells;
             $client->setClientInfo($infoarray);
-            $id = $client->getClientId();
-            $this->_clients[$id] = $client;
             $encodedUpdate = $this->_encodeData('initgame', $infoarray);
             $client->send($encodedUpdate);
-            $infoarray['players'] = $this->_composeUpdateMessage();
-            $encodedUpdate = $this->_encodeData('updateplayers', $infoarray['players']);
-            foreach ($this->_clients as $sendto) {
-                $sendto->send($encodedUpdate);
-            }
-            return;
+            unset($infoarray['maze']);
+            $id = $client->getClientId();
+            $this->_clients[$id] = $client;
         } else if ($action == "start") {
             $infoarray = $client->getClientInfo();
             $infoarray['location'] = $this->maze->getStart();
             $infoarray['heading'] = "right";
             $infoarray['action'] = null;
+            $infoarray['health'] = 10;
+            $infoarray['inplay'] = true;
             $client->setClientInfo($infoarray);
+            $id = $client->getClientId();
+            $this->_clients[$id] = $client;
         } else if ($action == "direction") {
             $infoarray = $client->getClientInfo();
             $infoarray['heading'] = $info['heading'];
@@ -100,8 +81,10 @@ class MazeApplication extends Application {
             $id = $client->getClientId();
             $this->_clients[$id] = $client;
         } else if ($action == "fire") {
-            $infoarray = $client->getClientInfo();
-            $infoarray['heading'] = $info['heading'];
+            $hit = $this->checkForHits($client);
+            if ($hit != null) {
+                
+            }
             $infoarray['action'] = "fire";
             $client->setClientInfo($infoarray);
             $id = $client->getClientId();
@@ -134,14 +117,65 @@ class MazeApplication extends Application {
         $updateData = $this->_composeUpdateMessage();
         $encodedUpdate = $this->_encodeData('update', $updateData);
         foreach ($this->_clients as $sendto) {
-            $sendto->send($encodedUpdate);
+            $infoarray = $sendto->getClientInfo();
+            if ($infoarray['loggedin'] == true) {
+                $sendto->send($encodedUpdate);
+            }
+        }
+    }
+
+    private function checkForHits($client) {
+        $infoarray = $client->getClientInfo();
+        $wallatt = 1;
+        for ($i = 1; $i < 4; $i++) {
+            $tempx = 0;
+            $tempy = 0;
+            if ($infoarray['heading'] === 'left') {
+                $tempx = $infoarray['location']->x - $i;
+                $tempy = $infoarray['location']->y;
+            } else if ($infoarray['heading'] === 'right') {
+                $tempx = $infoarray['location']->x + $i;
+                $tempy = $infoarray['location']->y;
+            } else if ($infoarray['heading'] === 'up') {
+                $tempx = $infoarray['location']->x;
+                $tempy = $infoarray['location']->y - $i;
+            } else if ($infoarray['heading'] === 'down') {
+                $tempx = $infoarray['location']->x;
+                $tempy = $infoarray['location']->y + $i;
+            }
+            if ($this->maze->cells[$tempy][$tempx] == 1) {
+                ++$wallatt;
+            } else {
+                foreach ($this->_clients as $aclient) {
+                    $clientinfo = $aclient->getClientInfo();
+                    if ($clientinfo['location'] == $infoarray['location']) {
+                        $damage = 0;
+                        if ($i == 1) {
+                            $damage = 16 / $wallatt;
+                        } else if ($i == 2) {
+                            $damage = 8 / $wallatt;
+                        } else if ($i == 3) {
+                            $damage = 4 / $wallatt;
+                        }
+                        $infoarray['health'] += $clientinfo['health'];
+                        $clientinfo['health'] -= $damage;
+                        if ($clientinfo['health'] <= 0) {
+                            $clientinfo['action'] = null;
+                            $clientinfo['player'] = $client;
+                            $clientinfo['inplay'] = false;
+                            $clientinfo['message'] = "You were killed by " . $infoarray['uname'] . "!";
+                            $client->send($this->_encodeData('die', $clientinfo));
+                        }
+                    }
+                }
+            }
         }
     }
 
     private function checkForCollision($location) {
         foreach ($this->_clients as $aclient) {
-            $info = $aclient->getClientInfo();
-            if ($info['location'] == $location) {
+            $infoarray = $aclient->getClientInfo();
+            if ($infoarray['inplay'] == true && $infoarray['location'] == $location) {
                 return $aclient;
             }
         }
