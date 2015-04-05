@@ -12,10 +12,13 @@ class MazeApplication extends Application {
     private $maze;
 
     public function __construct() {
-        $this->maze = new Maze(15, 15);
+        $this->maze = new Maze(25, 25);
     }
 
     public function onConnect($client) {
+        $infoarray = $client->getClientInfo();
+        $infoarray['inplay'] = false;
+        $client->setClientInfo($infoarray);
         $id = $client->getClientId();
         $this->_clients[$id] = $client;
     }
@@ -31,7 +34,6 @@ class MazeApplication extends Application {
     }
 
     public function onData($data, $client) {
-
         $decodedData = $this->_decodeData($data);
         $action = $decodedData['action'];
         $info = $decodedData['data'];
@@ -56,11 +58,13 @@ class MazeApplication extends Application {
             }
             $infoarray['loggedin'] = true;
             $infoarray['inplay'] = false;
+            $infoarray['health'] = 0;
             $infoarray['maze'] = $this->maze->cells;
             $client->setClientInfo($infoarray);
             $encodedUpdate = $this->_encodeData('initgame', $infoarray);
             $client->send($encodedUpdate);
             unset($infoarray['maze']);
+            $client->setClientInfo($infoarray);
             $id = $client->getClientId();
             $this->_clients[$id] = $client;
         } else if ($action == "start") {
@@ -73,6 +77,16 @@ class MazeApplication extends Application {
             $client->setClientInfo($infoarray);
             $id = $client->getClientId();
             $this->_clients[$id] = $client;
+        } else if ($action == "quit") {
+            $infoarray = $client->getClientInfo();
+            $infoarray['location'] = null;
+            $infoarray['heading'] = null;
+            $infoarray['action'] = null;
+            $infoarray['health'] = 0;
+            $infoarray['inplay'] = false;
+            $client->setClientInfo($infoarray);
+            $id = $client->getClientId();
+            $this->_clients[$id] = $client;
         } else if ($action == "direction") {
             $infoarray = $client->getClientInfo();
             $infoarray['heading'] = $info['heading'];
@@ -81,44 +95,74 @@ class MazeApplication extends Application {
             $id = $client->getClientId();
             $this->_clients[$id] = $client;
         } else if ($action == "fire") {
-            $hit = $this->checkForHits($client);
-            if ($hit != null) {
-                
-            }
+            $infoarray = $client->getClientInfo();
             $infoarray['action'] = "fire";
+            $infoarray['health'] = $this->checkForHits($client);
             $client->setClientInfo($infoarray);
             $id = $client->getClientId();
             $this->_clients[$id] = $client;
         } else if ($action == "move") {
             $infoarray = $client->getClientInfo();
             if ($info['heading'] === 'left') {
-                --$infoarray['location']->x;
+                if ($infoarray['location']->x === 0) {
+                    $infoarray['location']->x = $this->maze->sizex - 1;
+                } else {
+                    --$infoarray['location']->x;
+                }
             } else if ($info['heading'] === 'right') {
-                ++$infoarray['location']->x;
+                if ($infoarray['location']->x === $this->maze->sizex - 1) {
+                    $infoarray['location']->x = 0;
+                } else {
+                    ++$infoarray['location']->x;
+                }
             } else if ($info['heading'] === 'up') {
-                --$infoarray['location']->y;
+                if ($infoarray['location']->y === 0) {
+                    $infoarray['location']->y = $this->maze->sizey - 1;
+                } else {
+                    --$infoarray['location']->y;
+                }
             } else if ($info['heading'] === 'down') {
-                ++$infoarray['location']->y;
+                if ($infoarray['location']->y === $this->maze->sizey - 1) {
+                    $infoarray['location']->y = 0;
+                } else {
+                    ++$infoarray['location']->y;
+                }
             }
-            $collision = $this->checkForCollision($infoarray['location']);
+            $collision = $this->checkForCollision($infoarray);
             if ($collision == null) {
                 $infoarray['action'] = null;
                 $client->setClientInfo($infoarray);
                 $id = $client->getClientId();
                 $this->_clients[$id] = $client;
             } else {
+                $collisioninfo = $collision->getClientInfo();
+                $infoarray['message'] = "You died because you hit " . $collisioninfo['uname'] . "!";
+                $infoarray['location'] = null;
+                $infoarray['heading'] = null;
                 $infoarray['action'] = null;
-                $infoarray['player'] = $collision;
+                $infoarray['health'] = 0;
+                $infoarray['inplay'] = false;
+                $client->setClientInfo($infoarray);
                 $client->send($this->_encodeData('die', $infoarray));
-                $infoarray['player'] = $client;
-                $collision->send($this->_encodeData('die', $infoarray));
+                $id = $client->getClientId();
+                $this->_clients[$id] = $client;
+                $collisioninfo['message'] = "You died because " . $infoarray['uname'] . " hit you!";
+                $collisioninfo['location'] = null;
+                $collisioninfo['heading'] = null;
+                $collisioninfo['action'] = null;
+                $collisioninfo['health'] = 0;
+                $collisioninfo['inplay'] = false;
+                $collision->setClientInfo($collisioninfo);
+                $collision->send($this->_encodeData('die', $collisioninfo));
+                $id = $collision->getClientId();
+                $this->_clients[$id] = $collision;
             }
         }
         $updateData = $this->_composeUpdateMessage();
         $encodedUpdate = $this->_encodeData('update', $updateData);
         foreach ($this->_clients as $sendto) {
             $infoarray = $sendto->getClientInfo();
-            if ($infoarray['loggedin'] == true) {
+            if (isset($infoarray['loggedin']) && $infoarray['loggedin'] == true) {
                 $sendto->send($encodedUpdate);
             }
         }
@@ -143,12 +187,16 @@ class MazeApplication extends Application {
                 $tempx = $infoarray['location']->x;
                 $tempy = $infoarray['location']->y + $i;
             }
-            if ($this->maze->cells[$tempy][$tempx] == 1) {
+            if ($tempx < 0 || $tempx >= $this->maze->sizex || $tempy < 0 || $tempy >= $this->maze->sizey) {
+                continue;
+            }
+            if ($this->maze->cells[$tempy][$tempx] == "1") {
                 ++$wallatt;
             } else {
                 foreach ($this->_clients as $aclient) {
                     $clientinfo = $aclient->getClientInfo();
-                    if ($clientinfo['location'] == $infoarray['location']) {
+                    if ($infoarray['uname'] != $clientinfo['uname'] && $clientinfo['inplay'] == true &&
+                            $clientinfo['location']->x == $tempx && $clientinfo['location']->y == $tempy) {
                         $damage = 0;
                         if ($i == 1) {
                             $damage = 16 / $wallatt;
@@ -158,25 +206,39 @@ class MazeApplication extends Application {
                             $damage = 4 / $wallatt;
                         }
                         $infoarray['health'] += $clientinfo['health'];
+                        $client->setClientInfo($infoarray);
+                        $id = $client->getClientId();
+                        $this->_clients[$id] = $client;
+
                         $clientinfo['health'] -= $damage;
+                        $aclient->setClientInfo($clientinfo);
+                        $id = $aclient->getClientId();
+                        $this->_clients[$id] = $aclient;
                         if ($clientinfo['health'] <= 0) {
+                            $clientinfo['location'] = null;
+                            $clientinfo['heading'] = null;
                             $clientinfo['action'] = null;
-                            $clientinfo['player'] = $client;
+                            $clientinfo['health'] = 0;
                             $clientinfo['inplay'] = false;
-                            $clientinfo['message'] = "You were killed by " . $infoarray['uname'] . "!";
-                            $client->send($this->_encodeData('die', $clientinfo));
+                            $clientinfo['message'] = "You were shot by " . $infoarray['uname'] . "!";
+                            $aclient->setClientInfo($clientinfo);
+                            $aclient->send($this->_encodeData('die', $clientinfo));
+                            $id = $aclient->getClientId();
+                            $this->_clients[$id] = $aclient;
                         }
                     }
                 }
             }
         }
+        return $infoarray['health'];
     }
 
-    private function checkForCollision($location) {
-        foreach ($this->_clients as $aclient) {
-            $infoarray = $aclient->getClientInfo();
-            if ($infoarray['inplay'] == true && $infoarray['location'] == $location) {
-                return $aclient;
+    private function checkForCollision($client) {
+        foreach ($this->_clients as $otherclient) {
+            $infoarray = $otherclient->getClientInfo();
+            if ($client['uname'] != $infoarray['uname'] && $infoarray['inplay'] == true &&
+                    $infoarray['location'] == $client['location']) {
+                return $otherclient;
             }
         }
         return null;
@@ -189,10 +251,6 @@ class MazeApplication extends Application {
             $msgdata[] = $info;
         }
         return $msgdata;
-    }
-
-    public function log($message, $type = 'info') {
-        echo date('Y-m-d H:i:s') . ' [' . ($type ? $type : 'error') . '] ' . $message . PHP_EOL;
     }
 
 }

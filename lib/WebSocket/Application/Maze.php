@@ -41,16 +41,15 @@ class Point {
 }
 
 class Maze {
-
     const WALL = '1';
     const EMPTY_PATH = '0';
     const START = 's';
-    const GOAL = 'e';
 
     public $cells = array();
+    public $sizex;
+    public $sizey;
     private $visited = array();
     private $start = null;
-    private $goal = null;
 
     public function __construct($sizex = 51, $sizey = null) {
         if ($sizex % 2 == 0) {
@@ -61,6 +60,8 @@ class Maze {
         } else if ($sizey % 2 == 0) {
             $sizey++;
         }
+        $this->sizex = $sizex;
+        $this->sizey = $sizey;
 
         for ($i = 0; $i < $sizey; $i++) {
             $this->cells[$i] = array_fill(0, $sizex, self::WALL);
@@ -68,8 +69,25 @@ class Maze {
         }
 
         $this->gen_depth_first(1, 1);
-        //$this->setStart($this->randomEdgePoint());
-        //$this->setGoal($this->randomEdgePoint());
+
+        //add break in walls
+        for ($i = 1; $i < $sizey;) {
+            if ($this->cells[$i][1] == self::EMPTY_PATH && $this->cells[$i][$sizex - 2] == self::EMPTY_PATH) {
+                $this->cells[$i][0] = self::EMPTY_PATH;
+                $this->cells[$i][$sizex - 1] = self::EMPTY_PATH;
+            }
+            $i += rand(2, 6);
+        }
+
+        for ($i = 1; $i < $sizey;) {
+            $x = rand(2, $sizex - 2);
+            $y = rand(2, $sizey - 2);
+            if (($this->cells[$y][$x - 1] == self::WALL && $this->cells[$y][$x + 1] == self::WALL) ||
+                    ($this->cells[$y - 1][$x] == self::WALL && $this->cells[$y + 1][$x] == self::WALL)) {
+                $this->cells[$y][$x] = self::EMPTY_PATH;
+                $i++;
+            }
+        }
     }
 
     private function randomPoint() {
@@ -137,22 +155,9 @@ class Maze {
         return $neighbors;
     }
 
-    public function display() {
-        echo "\n";
-        foreach ($this->cells as $row) {
-            foreach ($row as $cell) {
-                echo $cell;
-            }
-            echo "\n";
-        }
-    }
-
-    public function setGoal(Point $goal) {
-        if ($this->goal instanceof Point) {
-            $this->cells[$this->goal->x][$this->goal->y] = self::EMPTY_PATH;
-        }
-        $this->goal = $goal;
-        $this->cells[$this->goal->x][$this->goal->y] = self::GOAL;
+    public function getStart() {
+        $this->setStart($this->randomPoint());
+        return $this->start;
     }
 
     public function setStart(Point $start) {
@@ -163,18 +168,9 @@ class Maze {
         $this->cells[$this->start->x][$this->start->y] = self::START;
     }
 
-    public function getGoal() {
-        return $this->goal;
-    }
-
-    public function getStart() {
-        $this->setStart($this->randomEdgePoint());
-        return $this->start;
-    }
-
     public function setCell(Point $p, $value) {
         if (
-                $this->cells[$p->x][$p->y] != self::WALL && $this->cells[$p->x][$p->y] != self::GOAL && $this->cells[$p->x][$p->y] != self::START
+                $this->cells[$p->x][$p->y] != self::WALL && $this->cells[$p->x][$p->y] != self::START
         ) {
             $this->cells[$p->x][$p->y] = $value;
         }
@@ -190,102 +186,6 @@ class Maze {
 
     public function getCells() {
         return (array) $this->cells;
-    }
-
-}
-
-/**
- * Add the solution finding function to the maze class
- * 
- * Kept seperate to facilitate using the parent class as a teaching tool
- */
-class Maze_solver extends maze {
-
-    const GOOD_TRAIL = 'o';
-    const BAD_TRAIL = '.';
-
-    public function solve(Point $p = null) {
-        if ($p === null)
-            $p = $this->getStart();
-
-        $curr = $this->getCell($p);
-
-        if ($curr == self::GOAL) {
-            return true;
-        }
-
-        if ($curr == self::EMPTY_PATH || $curr == self::START) {
-            $this->setCell($p, self::GOOD_TRAIL);
-
-            // uncomment this to show incremental progress
-            //$this->display();
-
-            $neighbors = $this->getNeighbors($p);
-            foreach ($neighbors as $n) {
-                if ($this->solve($n)) {
-                    return true;
-                }
-            }
-            $this->setCell($p, self::BAD_TRAIL);
-
-            // uncomment this to show incremental back steps
-            //$this->display();
-        }
-        return false;
-    }
-
-}
-
-class HTML_maze extends maze_solver {
-
-    protected $CSS_CLASS = array(
-        self::WALL => 'wall-cell',
-        self::EMPTY_PATH => 'empty-cell',
-        self::BAD_TRAIL => 'bad-cell',
-        self::GOOD_TRAIL => 'good-cell',
-        self::START => 'start-cell',
-        self::GOAL => 'goal-cell',
-    );
-    protected $HTML_COLORS = array(
-        self::WALL => '#000',
-        self::EMPTY_PATH => '#fff',
-        self::BAD_TRAIL => '#f0f',
-        self::GOOD_TRAIL => '#0f0',
-        self::START => '00f',
-        self::GOAL => '00f',
-    );
-
-    protected function css() {
-        static $need_setup = true;
-        if ($need_setup) {
-            echo "\n<style>";
-            foreach ($this->HTML_COLORS as $class => $color) {
-                echo <<<CSS
-	.{$this->CSS_CLASS[$class]} {
-		background-color: {$color};
-		width: 10px;
-		height: 10px;
-	}
-
-CSS;
-            }
-            echo "\n</style>";
-            $need_setup = false;
-        }
-    }
-
-    public function display() {
-        $this->css();
-
-        echo "\n<table cellpadding=\"0\" cellspacing=\"0\">";
-        foreach ($this->getCells() as $row) {
-            echo "\n\t<tr>";
-            foreach ($row as $cell) {
-                echo "\n\t\t<td class=\"{$this->CSS_CLASS[$cell]}\"></td>";
-            }
-            echo "\n\t</tr>";
-        }
-        echo "\n</table>";
     }
 
 }
