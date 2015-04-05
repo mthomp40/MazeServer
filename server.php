@@ -27,6 +27,6 @@ $server->setMaxRequestsPerMinute(2000);
 
 // Hint: Status application should not be removed as it displays usefull server informations:
 //$server->registerApplication('status', \WebSocket\Application\StatusApplication::getInstance());
-$server->registerApplication('mazegame', \WebSocket\Application\MazeApplication::getInstance());
+$server->registerApplication('mazegame', \WebSocket\Application\MazeServerApplication::getInstance());
 
 $server->run();
