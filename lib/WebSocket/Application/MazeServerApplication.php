@@ -2,7 +2,7 @@
 
 namespace WebSocket\Application;
 
-class MazeApplication extends Application {
+class MazeServerApplication extends Application {
 
 // These global data used to assign a colour tag to client
     private static $colourNamesArray = array('red', 'green', 'blue', 'aqua',
@@ -12,7 +12,7 @@ class MazeApplication extends Application {
     private $maze;
 
     public function __construct() {
-        $this->maze = new Maze(25, 25);
+        $this->maze = new Maze(50, 50);
     }
 
     public function onConnect($client) {
@@ -252,5 +252,4 @@ class MazeApplication extends Application {
         }
         return $msgdata;
     }
-
 }
